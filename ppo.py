@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.distributions.categorical import Categorical
 import gym
 
 class PPOModule:
@@ -13,17 +12,14 @@ class PPOModule:
         model,
         reward_func,
         n_episodes=50,
-        # sigma=0.1,
-        # learning_rate=0.001,
-        # decay=1.0,
-        # sigma_decay=1.0,
-        # threadcount=4,
+        learning_rate=1e-4,
         render_test=False,
         cuda=False,
         reward_goal=None,
         consecutive_goal_stopping=None,
         save_path=None
     ):
+        np.random.seed(int(time.time()))
         self.policy = model[0]
         self.vf = model[1]
         self.weights = list(self.policy.parameters())
@@ -43,8 +39,8 @@ class PPOModule:
         self.gamma = 0.9
         self.clip = 0.1
 
-        self.optim_p = optim.RMSprop(self.policy.parameters(), lr=1e-4)
-        self.optim_vf = optim.RMSprop(self.vf.parameters(), lr=1e-4)
+        self.optim_p = optim.RMSprop(self.policy.parameters(), lr=learing_rate)
+        self.optim_vf = optim.RMSprop(self.vf.parameters(), lr=learning_rate)
         self.criterion = nn.MSELoss()
 
     def run(self, iterations, print_step=10):
