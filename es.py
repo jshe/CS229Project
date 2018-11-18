@@ -31,9 +31,9 @@ class ESModule:
         new_weights = []
         for i, weight in enumerate(weights):
             # \sigma*\epsilon
-            perturbed = utils.to_var(self.sigma * epsilons[i])
+            perturb = utils.to_var(self.sigma * epsilons[i])
             # \Theta = \bar{\theta} + \sigma*\epsilon
-            new_weights.append(weight.data + perturbed)
+            new_weights.append(weight.data + perturb)
         return new_weights
 
     def step(self):
@@ -47,7 +47,7 @@ class ESModule:
         # R(\tau_i; \Theta)
         rewards = self.pool.map(
             self.env_function,
-            [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
+            [self.perturb_weights(copy.deepcopy(self.weights), self.policy, epsilons=eps) for eps in epsilons_population]
         )
         # TODO: early stopping
         if np.std(rewards) != 0:

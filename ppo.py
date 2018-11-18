@@ -17,6 +17,7 @@ class PPOModule:
         env_func,
         n_updates=5,
         batch_size=64,
+        max_steps=256,
         gamma=0.99,
         clip=0.01,
         ent_coeff=0.0,
@@ -28,18 +29,19 @@ class PPOModule:
         self.env_function = env_func
         self.n_updates = n_updates
         self.batch_size = batch_size
+        self.max_steps = max_steps
         self.gamma = gamma
         self.clip = clip
         self.ent_coeff = ent_coeff
         self.learning_rate = learning_rate
         # self.decay = decay
 
-        self.optim = optim.RMSprop(self.policy.parameters(), lr=self.learning_rate)
+        self.optimizer = optim.RMSprop(self.policy.parameters(), lr=self.learning_rate)
         self.criterion = nn.MSELoss()
 
     def step(self):
         # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
-        states, actions, rewards, values, logprobs, returns = self.env_function(gamma=self.gamma)
+        states, actions, rewards, values, logprobs, returns = self.env_function(policy=self.policy, max_steps=self.max_steps, gamma=self.gamma)
         # \hat{A_t}(\tau) = R_t(\tau) - b(s_t)
         advantages = returns - values
 
@@ -68,16 +70,17 @@ class PPOModule:
                 # \frac{1}{2}(v(s_t) - R_t(\tau))^2
                 value_loss = F.mse_loss(new_values, sampled_returns)
                 loss = policy_loss.mean() + value_loss.mean() - self.ent_coeff * dist_entropy.mean()
-                self.optim.zero_grad()
+                self.optimizer.zero_grad()
                 loss.backward()
-                self.optim.step()
+                self.optimizer.step()
         return copy.deepcopy(self.weights)
 
     @property
     def model_name(self):
-        return "PPO_{}_{}_{}_{}_{}_{}".format(
+        return "PPO_{}_{}_{}_{}_{}_{}_{}".format(
                 self.n_updates,
                 self.batch_size,
+                self.max_steps,
                 self.gamma,
                 self.clip,
                 self.ent_coeff,

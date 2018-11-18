@@ -6,7 +6,7 @@ def get_policy(args):
     if args.alg == 'ES':
         # add the model on top of the convolutional base
         policy = ESPolicy()
-    elif args.alg == 'PPO':
+    elif args.alg == 'PPO' or 'COMBO':
         policy = PPOPolicy()
     if torch.cuda.is_available():
         policy = policy.cuda()

@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 from functools import partial
 import logging
 import os
@@ -12,6 +14,7 @@ import numpy as np
 from gym import logger as gym_logger
 from es import ESModule
 from ppo import PPOModule
+from combo import COMBOModule
 import matplotlib.pyplot as plt
 # from pytorch_es.utils.helpers import weights_init
 
@@ -29,8 +32,7 @@ def main():
         policy = policies.get_policy(args)
         if args.alg == 'ES':
             run_func = partial(envs.run_env_ES,
-                                  policy=policy,
-                                  env_func=env_func)
+                               env_func=env_func)
             alg = ESModule(
                 policy, run_func,
                 population_size=args.population_size, # HYPERPARAMETER
@@ -40,18 +42,36 @@ def main():
             )
         elif args.alg == 'PPO':
             run_func = partial(envs.run_env_PPO,
-                                  policy=policy,
-                                  env_func=env_func,
-                                  max_steps=args.max_steps) # TODO: update
+                               env_func=env_func) # TODO: update
             alg = PPOModule(
                 policy,
                 run_func,
                 n_updates=args.n_updates, # HYPERPARAMETER
                 batch_size=args.batch_size, # HYPERPARAMETER
+                max_steps = args.max_steps,
                 gamma=args.gamma,
                 clip=args.clip,
                 ent_coeff=args.ent_coeff,
                 learning_rate=args.lr)
+
+        elif args.alg == 'COMBO':
+            run_func = partial(envs.run_env_PPO,
+                               env_func=env_func)
+
+            alg = COMBOModule(
+                policy,
+                run_func,
+                population_size=args.population_size, # HYPERPARAMETER
+                sigma=args.sigma, # HYPERPARAMETER
+                n_updates=args.n_updates, # HYPERPARAMETER
+                batch_size=args.batch_size, # HYPERPARAMETER
+                max_steps = args.max_steps,
+                gamma=args.gamma,
+                clip=args.clip,
+                ent_coeff=args.ent_coeff,
+                learning_rate=args.lr,
+                threadcount=4)
+
         exp_dir = os.path.join(args.directory, alg.model_name)
         if not os.path.exists(exp_dir):
             os.makedirs(exp_dir)
@@ -66,9 +86,9 @@ def main():
             weights = alg.step()
             if (iteration+1) % 10 == 0:
                 if args.alg == 'ES':
-                    test_reward = run_func(weights, stochastic=False, render=False)
-                elif args.alg == 'PPO':
-                    test_reward = run_func(stochastic=False, render=False, reward_only=True)
+                    test_reward = run_func(weights, policy, stochastic=False, render=False)
+                elif args.alg == 'PPO' or 'COMBO':
+                    test_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
                 rewards.append(test_reward)
                 print('iter %d. reward: %f' % (iteration+1, test_reward))
 
@@ -79,9 +99,9 @@ def main():
             iteration += 1
         end = time.time() - start
         if args.alg == 'ES':
-            total_reward = run_func(weights, stochastic=False, render=False)
-        elif args.alg == 'PPO':
-            total_reward = run_func(stochastic=False, render=False, reward_only=True)
+            total_reward = run_func(weights, policy, stochastic=False, render=False)
+        elif args.alg == 'PPO' or 'COMBO':
+            total_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
         all_rewards.append(rewards)
         all_times.append(end)
         all_totals.append(total_reward)
@@ -112,10 +132,10 @@ def main():
     print(f"Average rewards from final weights: {total_mean}")
     msg = f"Average rewards from final weights: {total_mean}"
     msg += "\n"
-    print(f"Average to completion: {time_mean}")
-    msg += f"Average to completion: {time_mean}"
+    print(f"Average time to completion: {time_mean}")
+    msg += f"Average ime to completion: {time_mean}"
     msg += "\n"
-
+    print(f"Results saved at: {exp_dir}")
     out_file.write(msg)
     out_file.flush()
 
