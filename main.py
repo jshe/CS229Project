@@ -4,9 +4,10 @@ import os
 import pickle
 import time
 import torch
-import models
+import policies
 import options
-import rewards
+import gym
+import envs
 from gym import logger as gym_logger
 from es import ESModule
 from ppo import PPOModule
@@ -14,46 +15,44 @@ from ppo import PPOModule
 
 def main():
     args = options.parse_args()
-    cuda = args.cuda and torch.cuda.is_available()
-    model = models.get_model(args, cuda)
+    policy = policies.get_policy(args)
     gym_logger.setLevel(logging.CRITICAL)
+    env_func = partial(envs.get_env, args=args)
     if args.alg == 'ES':
-        reward_func = partial(rewards.get_reward_ES,
-                              cuda=cuda,
-                              model=model)
+        run_func = partial(envs.run_env_ES,
+                              policy=policy,
+                              env_func=env_func)
         alg = ESModule(
-            model, reward_func,
+            policy, run_func,
             population_size=5, # HYPERPARAMETER
             sigma=0.1, # HYPERPARAMETER
             learning_rate=0.001, # HYPERPARAMETER
             threadcount=15,
-            cuda=cuda,
             reward_goal=200,
-            consecutive_goal_stopping=10
+            consecutive_goal_max=10
         )
     elif args.alg == 'PPO':
-        reward_func = partial(rewards.get_reward_PPO,
-                              cuda=cuda,
-                              model=model[0],
-                              vf=model[1])
+        run_func = partial(envs.run_env_PPO,
+                              policy=policy,
+                              env_func=env_func,
+                              max_steps=500) # TODO: update
         alg = PPOModule(
-            model,
-            reward_func,
-            n_episodes=5, # HYPERPARAMETER
-            cuda=cuda,
+            policy,
+            run_func,
+            n_updates=5, # HYPERPARAMETER
+            batch_size=64, # HYPERPARAMETER
             reward_goal=200,
-            consecutive_goal_stopping=10
-        )
+            consecutive_goal_max=10)
     start = time.time()
     final_weights = alg.run(50)
     end = time.time() - start
     pickle.dump(final_weights, open(os.path.abspath(args.weights_path), 'wb'))
 
     if args.alg == 'ES':
-        reward = reward_func(final_weights, render=True)
+        total_reward = run_func(final_weights, render=False)
     elif args.alg == 'PPO':
-        reward, _ = reward_func(render=True)
-    print(f"Reward from final weights: {reward}")
+        total_reward = run_func(render=False, reward_only=True)
+    print(f"Reward from final weights: {total_reward}")
     print(f"Time to completion: {end}")
 
 if __name__ == '__main__':

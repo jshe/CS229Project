@@ -4,112 +4,96 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import gym
+import time
+import utils
+from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
 class PPOModule:
 
     def __init__(
         self,
-        model,
-        reward_func,
-        n_episodes=50,
-        learning_rate=1e-4,
+        policy,
+        env_func,
+        n_updates=5,
+        batch_size=64,
+        gamma=0.99,
+        clip=0.1,
+        ent_coeff=0.01,
+        learning_rate=0.0001,
         render_test=False,
-        cuda=False,
         reward_goal=None,
-        consecutive_goal_stopping=None,
+        consecutive_goal_max=None,
         save_path=None
     ):
         np.random.seed(int(time.time()))
-        self.policy = model[0]
-        self.vf = model[1]
+        self.policy = policy
         self.weights = list(self.policy.parameters())
-        self.reward_function = reward_func
-        self.n_episodes = n_episodes
-        # self.SIGMA = sigma
-        # self.LEARNING_RATE = learning_rate
-        self.cuda = cuda
+        self.env_function = env_func
+        self.n_updates = n_updates
+        self.batch_size = 32#batch_size
+        self.gamma = gamma
+        self.clip = clip
+        self.ent_coeff = ent_coeff
+        self.learning_rate = learning_rate
         # self.decay = decay
-        # self.sigma_decay = sigma_decay
-        # self.pool = ThreadPool(threadcount)
         self.render_test = render_test
         self.reward_goal = reward_goal
-        self.consecutive_goal_stopping = consecutive_goal_stopping
+        self.consecutive_goal_max = consecutive_goal_max
         self.consecutive_goal_count = 0
         self.save_path = save_path
-        self.gamma = 0.9
-        self.clip = 0.1
 
-        self.optim_p = optim.RMSprop(self.policy.parameters(), lr=learing_rate)
-        self.optim_vf = optim.RMSprop(self.vf.parameters(), lr=learning_rate)
+        self.optim = optim.RMSprop(self.policy.parameters(), lr=self.learning_rate)
         self.criterion = nn.MSELoss()
 
     def run(self, iterations, print_step=10):
-        for iteration in range(iterations):
-            V = []
-            V_ = []
-            Ratio = []
-            Ent = []
-            for _ in range(self.n_episodes):
-                rewards, traj = self.reward_function()
+        iteration = 0
+        # for iteration in range(iterations):
+        while True:
+            # for _ in range(self.n_episodes):
+            # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
+            states, actions, rewards, values, logprobs, returns = self.env_function(gamma=self.gamma)
+            # \hat{A_t}(\tau) = R_t(\tau) - b(s_t)
+            advantages = returns - values
 
-                batch_size = len(traj)-1
-                s_batch = torch.zeros(batch_size, 4)
-                a_batch = torch.zeros(batch_size, 1)
-                v_batch_ = torch.zeros(batch_size, 1)
+            advantages = (advantages - advantages.mean()) / advantages.std()
+            for update in range(self.n_updates):
+                sampler = BatchSampler(SubsetRandomSampler(list(range(advantages.shape[0]))), batch_size=self.batch_size, drop_last=False)
+                for i, index in enumerate(sampler):
+                    sampled_states = utils.to_var(states[index])
+                    sampled_actions = utils.to_var(actions[index])
+                    sampled_logprobs = utils.to_var(logprobs[index])
+                    sampled_returns = utils.to_var(returns[index])
+                    sampled_advs = utils.to_var(advantages[index])
+                    # v(s_t), \pi_\theta(a_t|s_t), H(\pi(a_t, |a_t))
+                    new_values, new_logprobs, dist_entropy = self.policy.evaluate(sampled_states, sampled_actions)
 
-                v = traj[-1][-1]
-                for i, tr in enumerate(reversed(traj[:-1])):
-                    tr_list = list(tr)
-                    v = tr[2] + self.gamma * v
-                    tr_list.append(v)
-                    traj[-2-i] = tuple(tr_list)
-
-                    s_batch[-1-i] = torch.Tensor(traj[-2-i][0])
-                    a_batch[-1-i] = torch.Tensor(traj[-2-i][1])
-                    v_batch_[-1-i] = torch.Tensor([traj[-2-i][4]]).unsqueeze(0)
-                v_batch = self.vf(s_batch)
-                A_batch = v_batch_ - v_batch
-                prob_batch = self.policy(s_batch)
-                ent_batch = -(prob_batch * torch.log(prob_batch)).sum(dim=1)
-                p_batch = prob_batch.gather(1, a_batch.long())
-                ratio1 = p_batch/p_batch.detach()
-                ratio2 = ratio1.clamp(1-self.clip, 1+self.clip)
-                ratio = torch.min(ratio1, ratio2)
-
-                Ratio.append(ratio)
-                V.append(v_batch)
-                V_.append(v_batch_)
-                Ent.append(ent_batch)
-
-            Ratio = torch.cat(Ratio, dim=0)
-            V = torch.cat(V, dim=0)
-            V_ = torch.cat(V_, dim=0)
-            Ent = torch.cat(Ent, dim=0)
-
-            A = V_ - V
-            A = (A - A.mean()) / A.std()
-            loss = -A.detach() * Ratio
-            loss_v = 0.5*((V_-V).clamp(-self.clip, self.clip))**2
-            loss = loss.mean() + 0.1 * loss_v.mean() + 0.01 * Ent.mean()
-            self.optim_p.zero_grad()
-            self.optim_vf.zero_grad()
-            loss.backward()
-            self.optim_p.step()
-            self.optim_vf.step()
+                    # \dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}
+                    ratio1 = torch.exp(new_logprobs - sampled_logprobs)
+                    # [\dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}]_{\text{clip}}
+                    ratio2 = ratio1.clamp(1-self.clip, 1+self.clip)
+                    # \min\{.,[.]_{\text{clip}}\}
+                    ratio = torch.min(ratio1, ratio2)
+                    # \min\{. \,[.]_{\text{clip}}\}
+                    policy_loss = -sampled_advs.detach() * ratio
+                    sampled_returns = sampled_returns.view(-1, 1)
+                    new_values = new_values.view(-1, 1)
+                    # \frac{1}{2}(v(s_t) - R_t(\tau))^2
+                    value_loss = F.mse_loss(new_values, sampled_returns)
+                    loss = policy_loss.mean() + value_loss.mean() + self.ent_coeff * dist_entropy.mean()
+                    self.optim.zero_grad()
+                    loss.backward()
+                    self.optim.step()
 
             if (iteration+1) % print_step == 0:
-              test_reward, _ = self.reward_function(stochastic=False, render=self.render_test)
-              print('iter %d. reward: %f' % (iteration+1, test_reward))
-              if self.save_path:
-                  pickle.dump(self.weights, open(self.save_path, 'wb'))
+                test_reward = self.env_function(stochastic=False, render=self.render_test, reward_only=True)
+                print('iter %d. reward: %f' % (iteration+1, test_reward))
 
-              if self.reward_goal and self.consecutive_goal_stopping:
-                  if test_reward >= self.reward_goal:
-                      self.consecutive_goal_count += 1
-                  else:
-                      self.consecutive_goal_count = 0
+                if self.save_path:
+                    pickle.dump(self.weights, open(self.save_path, 'wb'))
 
-                  if self.consecutive_goal_count >= self.consecutive_goal_stopping:
-                      return self.weights
-
+                if self.consecutive_goal_max and self.reward_goal:
+                    self.consecutive_goal_count = self.consecutive_goal_count+1 if test_reward >= self.reward_goal else 0
+                    if self.consecutive_goal_count >= self.consecutive_goal_max:
+                        return self.weights
+            iteration += 1
         return self.weights
