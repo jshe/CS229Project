@@ -41,7 +41,7 @@ class PPOModule:
 
     def step(self):
         # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
-        states, actions, rewards, values, logprobs, returns = self.env_function(policy=self.policy, max_steps=self.max_steps, gamma=self.gamma)
+        states, actions, rewards, values, logprobs, returns = self.env_function(policy=self.policy, max_steps=self.max_steps, gamma=self.gamma)#, stochastic=False)
         # \hat{A_t}(\tau) = R_t(\tau) - b(s_t)
         advantages = returns - values
 
@@ -54,7 +54,6 @@ class PPOModule:
                 sampled_logprobs = utils.to_var(logprobs[index])
                 sampled_returns = utils.to_var(returns[index])
                 sampled_advs = utils.to_var(advantages[index])
-                self.optimizer.zero_grad()
                 # v(s_t), \pi_\theta(a_t|s_t), H(\pi(a_t, |a_t))
                 new_values, new_logprobs, dist_entropy = self.policy.evaluate(sampled_states, sampled_actions)
 
@@ -71,6 +70,7 @@ class PPOModule:
                 # \frac{1}{2}(v(s_t) - R_t(\tau))^2
                 value_loss = F.mse_loss(new_values, sampled_returns)
                 loss = policy_loss.mean() + value_loss.mean() - self.ent_coeff * dist_entropy.mean()
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
         return copy.deepcopy(self.weights)
