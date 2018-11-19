@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--clip', type=float, default=0.01)
     parser.add_argument('--ent_coeff', type=float, default=0.0)
+    parser.add_argument('--environment', type=str, default='cartpole', choices=['cartpole', 'walker'])
 
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--n_trials', type=int, default=5)

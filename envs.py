@@ -7,10 +7,6 @@ import utils
 from torch.distributions.categorical import Categorical
 from torch.autograd import Variable
 
-
-def get_env(args):
-    return gym.make("CartPole-v0")
-
 # weights is first argument because of threadpool
 def run_env_ES(weights, policy, env_func, render=False, stochastic=False):
     cloned_policy = copy.deepcopy(policy)

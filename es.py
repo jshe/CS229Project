@@ -47,7 +47,7 @@ class ESModule:
         # R(\tau_i; \Theta)
         rewards = self.pool.map(
             self.env_function,
-            [self.perturb_weights(copy.deepcopy(self.weights), self.policy, epsilons=eps) for eps in epsilons_population]
+            [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
         )
         # TODO: early stopping
         if np.std(rewards) != 0:

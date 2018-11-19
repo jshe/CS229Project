@@ -18,20 +18,36 @@ from combo import COMBOModule
 import matplotlib.pyplot as plt
 # from pytorch_es.utils.helpers import weights_init
 
+
+def get_env(args):
+    if args.environment == 'cartpole':
+        return gym.make("CartPole-v0")
+    elif args.environment == 'walker':
+        return gym.make("BipedalWalker-v2")
+
+
+def get_goal(args):
+    if args.environment == 'cartpole':
+        return 200
+    elif args.environment == 'walker':
+        return 300
+
 def main():
     args = options.parse_args()
     gym_logger.setLevel(logging.CRITICAL)
-    env_func = partial(envs.get_env, args=args)
-    reward_goal = 200
+    env_func = partial(get_env, args=args)
+    env = env_func()
+    reward_goal = get_goal(args)
     consecutive_goal_max = 10
     max_iteration = 5000
     all_rewards = []
     all_times = []
     all_totals = []
     for trial in range(args.n_trials):
-        policy = policies.get_policy(args)
+        policy = policies.get_policy(args, env)
         if args.alg == 'ES':
             run_func = partial(envs.run_env_ES,
+                               policy=policy,
                                env_func=env_func)
             alg = ESModule(
                 policy, run_func,
@@ -86,7 +102,7 @@ def main():
             weights = alg.step()
             if (iteration+1) % 10 == 0:
                 if args.alg == 'ES':
-                    test_reward = run_func(weights, policy, stochastic=False, render=False)
+                    test_reward = run_func(weights, stochastic=False, render=False)
                 elif args.alg == 'PPO' or 'COMBO':
                     test_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
                 rewards.append(test_reward)
@@ -99,7 +115,7 @@ def main():
             iteration += 1
         end = time.time() - start
         if args.alg == 'ES':
-            total_reward = run_func(weights, policy, stochastic=False, render=False)
+            total_reward = run_func(weights, stochastic=False, render=False)
         elif args.alg == 'PPO' or 'COMBO':
             total_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
         all_rewards.append(rewards)

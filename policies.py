@@ -1,24 +1,33 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
+from torch.distributions import Normal
 
-def get_policy(args):
-    if args.alg == 'ES':
-        # add the model on top of the convolutional base
-        policy = ESPolicy()
-    elif args.alg == 'PPO' or 'COMBO':
-        policy = PPOPolicy()
+def get_policy(args, env):
+    if args.environment == 'walker':
+        if args.alg == 'ES':
+            # add the model on top of the convolutional base
+            policy = ESPolicyContinuous(24, 4)
+        elif args.alg == 'PPO' or 'COMBO':
+            policy = PPOPolicyContinuous(24, 4)
+    elif args.environment == 'cartpole':
+        if args.alg == 'ES':
+            # add the model on top of the convolutional base
+            policy = ESPolicyDiscrete(4, 1)
+        elif args.alg == 'PPO' or 'COMBO':
+            policy = PPOPolicyDiscrete(4, 1)
     if torch.cuda.is_available():
         policy = policy.cuda()
     return policy
 
-class ESPolicy(nn.Module):
-    def __init__(self):#, obs_space, action_space):
-        super(ESPolicy, self).__init__()
+class ESPolicyDiscrete(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(ESPolicyDiscrete, self).__init__()
         self.policy = nn.Sequential(
-            nn.Linear(4, 100),
+            nn.Linear(state_dim, 100),
             nn.ReLU(),
-            nn.Linear(100, 2),
+            nn.Linear(100, action_dim),
             nn.Softmax())
 
     def forward(self, state, stochastic=True):
@@ -29,18 +38,37 @@ class ESPolicy(nn.Module):
         else:
             return pred.argmax() # depends on action space type (box or discrete)
 
-class PPOPolicy(nn.Module):
-    def __init__(self):#, obs_space, action_space):
-        super(PPOPolicy, self).__init__()
+class ESPolicyContinuous(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(ESPolicyContinuous, self).__init__()
+        self.policy = nn.Sequential(
+            nn.Linear(state_dim, 100),
+            nn.ReLU(),
+            nn.Linear(100, action_dim),
+            nn.Tanh())
+
+        self.std = nn.Parameter(torch.zeros(action_dim))
+
+    def forward(self, state, stochastic=False):
+        mean = self.policy(state)
+        dist = Normal(mean, F.softplus(self.std))
+        if stochastic:
+            return dist.sample().squeeze() # depends on action space type (box or discrete)
+        else:
+            return mean.squeeze() # depends on action space type (box or discrete)
+
+class PPOPolicyDiscrete(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(PPOPolicyDiscrete, self).__init__()
         body = nn.Sequential(
-        			nn.Linear(4, 100),
+        			nn.Linear(state_dim, 100),
         			nn.ReLU(),
         			nn.Linear(100, 100))
 
         self.policy = nn.Sequential(
         			body,
         			nn.ReLU(),
-        			nn.Linear(100, 2),
+        			nn.Linear(100, action_dim),
         			nn.Softmax(dim=1))
 
         self.vf = nn.Sequential(
@@ -67,5 +95,42 @@ class PPOPolicy(nn.Module):
         entropy = dist.entropy().squeeze()
         return value, log_prob, entropy
 
-    # def evaluate_state(self, state):
-    #     return self.vf(state)
+
+class PPOPolicyContinuous(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(PPOPolicyContinuous, self).__init__()
+        body = nn.Sequential(
+        			nn.Linear(state_dim, 100),
+        			nn.ReLU(),
+        			nn.Linear(100, 100))
+
+        self.policy = nn.Sequential(
+        			body,
+        			nn.ReLU(),
+        			nn.Linear(100, action_dim),
+        			nn.Tanh())
+
+        self.vf = nn.Sequential(
+        			body,
+        			nn.ReLU(),
+        			nn.Linear(100, 1))
+        self.std = nn.Parameter(torch.zeros(action_dim))
+
+    def forward(self, state, stochastic=True):
+        mean = self.policy(state)
+        value = self.vf(state).squeeze()
+        dist = Normal(mean, F.softplus(self.std))
+        if stochastic:
+            action = dist.sample().squeeze() # depends on action space type (box or discrete)
+        else:
+            action = mean.squeeze() # depends on action space type (box or discrete)
+        log_prob = dist.log_prob(action).sum(-1).squeeze()
+        return value, action, log_prob
+
+    def evaluate(self, state, action):
+        mean = self.policy(state)
+        value = self.vf(state).squeeze()
+        dist = Normal(mean, F.softplus(self.std))
+        log_prob = dist.log_prob(action).sum(dim=1).squeeze()
+        entropy = dist.entropy().sum(dim=1).squeeze()
+        return value, log_prob, entropy
