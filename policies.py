@@ -71,7 +71,7 @@ class PPOPolicyDiscrete(nn.Module):
                                 body,
                                 nn.ReLU(),
                                 nn.Linear(100, action_dim),
-                                nn.Tanh())
+                                nn.Softmax())
 
         self.vf = nn.Sequential(
                                 body,
@@ -87,6 +87,7 @@ class PPOPolicyDiscrete(nn.Module):
         else:
             action = pred.argmax() # depends on action space type (box or discrete)
         log_prob = dist.log_prob(action).squeeze()
+        #print(action)
         return value, action, log_prob
 
     def evaluate(self, state, action):

@@ -44,7 +44,7 @@ def run_env_PPO(policy, env, max_steps=100, render=False, stochastic=True, rewar
     masks = []
     step = 0
     while True:
-        if (step == max_steps):# and (not reward_only):
+        if (step == max_steps) and (not reward_only):
             break
         if render:
             env.render()
@@ -64,11 +64,11 @@ def run_env_PPO(policy, env, max_steps=100, render=False, stochastic=True, rewar
         total_reward += reward
         state = new_state
         if done:
-            # if reward_only:
-            #     env.close()
-            #     return total_reward
-            # else:
-            state = env.reset()
+            if reward_only:
+                env.close()
+                return total_reward
+            else:
+                state = env.reset()
         step += 1
     env.close()
     states = np.asarray(states)
@@ -84,6 +84,7 @@ def run_env_PPO(policy, env, max_steps=100, render=False, stochastic=True, rewar
         last_value = utils.to_data(last_value)
     returns = calculate_returns(rewards, masks, last_value, gamma)
     if reward_only:
+        print(rewards)
         return np.sum(rewards)
     return states, actions, rewards, values.squeeze(), logprobs, returns
 

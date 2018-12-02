@@ -58,7 +58,7 @@ class PPOModule:
                 new_values, new_logprobs, dist_entropy = self.policy.evaluate(sampled_states, sampled_actions)
 
                 ratio = torch.exp(new_logprobs - sampled_logprobs)
-                print(ratio.sum())
+                # print(ratio.sum())
                 sampled_advs = sampled_advs.view(-1, 1)
                 surrogate1 = ratio * sampled_advs
                 surrogate2 = torch.clamp(ratio, 1 - self.clip, 1 + self.clip) * sampled_advs
