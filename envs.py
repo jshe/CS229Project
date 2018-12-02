@@ -8,14 +8,13 @@ from torch.distributions.categorical import Categorical
 from torch.autograd import Variable
 
 # weights is first argument because of threadpool
-def run_env_ES(weights, policy, env_func, render=False, stochastic=False):
+def run_env_ES(weights, policy, env, render=False, stochastic=False):
     cloned_policy = copy.deepcopy(policy)
     for i, weight in enumerate(cloned_policy.parameters()):
         try:
             weight.data.copy_(weights[i])
         except:
             weight.data.copy_(weights[i].data)
-    env = env_func()
     state = env.reset()
     done = False
     total_reward = 0
@@ -33,8 +32,7 @@ def run_env_ES(weights, policy, env_func, render=False, stochastic=False):
     env.close()
     return total_reward
 
-def run_env_PPO(policy, env_func, max_steps=100, render=False, stochastic=True, reward_only=False, gamma=0.99):
-    env = env_func()
+def run_env_PPO(policy, env, max_steps=100, render=False, stochastic=True, reward_only=False, gamma=0.99):
     state = env.reset()
     done = False
     total_reward = 0
@@ -46,7 +44,7 @@ def run_env_PPO(policy, env_func, max_steps=100, render=False, stochastic=True, 
     masks = []
     step = 0
     while True:
-        if (not reward_only) and (step == max_steps):
+        if (step == max_steps):# and (not reward_only):
             break
         if render:
             env.render()
@@ -54,7 +52,8 @@ def run_env_PPO(policy, env_func, max_steps=100, render=False, stochastic=True, 
         value, action, logprob = policy.forward(utils.to_var(state).unsqueeze(0), stochastic) # depends on observation space (generally box)
         value, action, logprob = utils.to_data(value), utils.to_data(action), utils.to_data(logprob)
         # TODO: epsilon-greedy??
-        state, reward, done, _ = env.step(action)
+        # print(action.shape)
+        new_state, reward, done, _ = env.step(action)
         # calculate value of the NEXT state
         states.append(state)
         actions.append(action)
@@ -63,12 +62,13 @@ def run_env_PPO(policy, env_func, max_steps=100, render=False, stochastic=True, 
         logprobs.append(logprob)
         masks.append(1-done)
         total_reward += reward
+        state = new_state
         if done:
-            if reward_only:
-                env.close()
-                return total_reward
-            else:
-                state = env.reset()
+            # if reward_only:
+            #     env.close()
+            #     return total_reward
+            # else:
+            state = env.reset()
         step += 1
     env.close()
     states = np.asarray(states)
@@ -83,7 +83,9 @@ def run_env_PPO(policy, env_func, max_steps=100, render=False, stochastic=True, 
         last_value, _, _ = policy.forward(utils.to_var(state).unsqueeze(0), stochastic)
         last_value = utils.to_data(last_value)
     returns = calculate_returns(rewards, masks, last_value, gamma)
-    return states, actions, rewards, values, logprobs, returns
+    if reward_only:
+        return np.sum(rewards)
+    return states, actions, rewards, values.squeeze(), logprobs, returns
 
 def calculate_returns(rewards, masks, last_value, gamma=0.99):
     returns = np.zeros(rewards.shape[0] + 1)

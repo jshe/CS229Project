@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 from torch.distributions import Normal
+import numpy as np
+import math
 
 def get_policy(args, env):
     if args.environment == 'walker':
@@ -61,20 +63,20 @@ class PPOPolicyDiscrete(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(PPOPolicyDiscrete, self).__init__()
         body = nn.Sequential(
-        			nn.Linear(state_dim, 100),
-        			nn.ReLU(),
-        			nn.Linear(100, 100))
+                                nn.Linear(state_dim, 100),
+                                nn.ReLU(),
+                                nn.Linear(100, 100))
 
         self.policy = nn.Sequential(
-        			body,
-        			nn.ReLU(),
-        			nn.Linear(100, action_dim),
-        			nn.Softmax(dim=1))
+                                body,
+                                nn.ReLU(),
+                                nn.Linear(100, action_dim),
+                                nn.Tanh())
 
         self.vf = nn.Sequential(
-        			body,
-        			nn.ReLU(),
-        			nn.Linear(100, 1))
+                                body,
+                                nn.ReLU(),
+                                nn.Linear(100, 1))
 
     def forward(self, state, stochastic=True):
         pred = self.policy(state)
@@ -99,21 +101,26 @@ class PPOPolicyDiscrete(nn.Module):
 class PPOPolicyContinuous(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(PPOPolicyContinuous, self).__init__()
-        body = nn.Sequential(
-        			nn.Linear(state_dim, 100),
-        			nn.ReLU(),
-        			nn.Linear(100, 100))
+        #body = nn.Sequential(
+        #                       nn.Linear(state_dim, 100),
+        #                       nn.ReLU(),
+        #                       nn.Linear(100, 100))
 
         self.policy = nn.Sequential(
-        			body,
-        			nn.ReLU(),
-        			nn.Linear(100, action_dim),
-        			nn.Tanh())
+                                nn.Linear(state_dim, 64),
+                                nn.Tanh(),
+                                nn.Linear(64, 128),
+                                nn.Tanh(),
+                                nn.Linear(128, action_dim))#,
+                                #nn.Softmax(dim=1))
 
         self.vf = nn.Sequential(
-        			body,
-        			nn.ReLU(),
-        			nn.Linear(100, 1))
+                                nn.Linear(state_dim, 64),
+                                nn.Tanh(),
+                                nn.Linear(64, 128),
+                                nn.Tanh(),
+                                nn.Linear(128, 1))
+
         self.std = nn.Parameter(torch.zeros(action_dim))
 
     def forward(self, state, stochastic=True):
@@ -124,7 +131,7 @@ class PPOPolicyContinuous(nn.Module):
             action = dist.sample().squeeze() # depends on action space type (box or discrete)
         else:
             action = mean.squeeze() # depends on action space type (box or discrete)
-        log_prob = dist.log_prob(action).sum(-1).squeeze()
+        log_prob = dist.log_prob(action).sum(1).squeeze()
         return value, action, log_prob
 
     def evaluate(self, state, action):
@@ -132,5 +139,6 @@ class PPOPolicyContinuous(nn.Module):
         value = self.vf(state).squeeze()
         dist = Normal(mean, F.softplus(self.std))
         log_prob = dist.log_prob(action).sum(dim=1).squeeze()
-        entropy = dist.entropy().sum(dim=1).squeeze()
+        entropy = dist.entropy().sum(dim=-1).squeeze()
         return value, log_prob, entropy
+

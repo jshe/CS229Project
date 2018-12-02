@@ -8,9 +8,10 @@ import gym
 import time
 import utils
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+from torch.autograd import Variable
+
 
 class PPOModule:
-
     def __init__(
         self,
         policy,
@@ -23,7 +24,6 @@ class PPOModule:
         ent_coeff=0.0,
         learning_rate=0.0001
     ):
-        np.random.seed(int(time.time()))
         self.policy = policy
         self.weights = list(self.policy.parameters())
         self.env_function = env_func
@@ -36,7 +36,7 @@ class PPOModule:
         self.learning_rate = learning_rate
         # self.decay = decay
 
-        self.optimizer = optim.RMSprop(self.policy.parameters(), lr=self.learning_rate)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.learning_rate)  #HACK (RMSprop)
         self.criterion = nn.MSELoss()
 
     def step(self):
@@ -57,14 +57,21 @@ class PPOModule:
                 # v(s_t), \pi_\theta(a_t|s_t), H(\pi(a_t, |a_t))
                 new_values, new_logprobs, dist_entropy = self.policy.evaluate(sampled_states, sampled_actions)
 
-                # \dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}
-                ratio1 = torch.exp(new_logprobs - sampled_logprobs)
-                # [\dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}]_{\text{clip}}
-                ratio2 = ratio1.clamp(1-self.clip, 1+self.clip)
-                # \min\{.,[.]_{\text{clip}}\}
-                ratio = torch.min(ratio1, ratio2)
-                # \min\{. \,[.]_{\text{clip}}\}
-                policy_loss = -sampled_advs.detach() * ratio
+                ratio = torch.exp(new_logprobs - sampled_logprobs)
+                print(ratio.sum())
+                sampled_advs = sampled_advs.view(-1, 1)
+                surrogate1 = ratio * sampled_advs
+                surrogate2 = torch.clamp(ratio, 1 - self.clip, 1 + self.clip) * sampled_advs
+                policy_loss = -torch.min(surrogate1, surrogate2).mean()
+
+                # # \dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}
+                # ratio1 = torch.exp(new_logprobs - sampled_logprobs)
+                # # [\dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}]_{\text{clip}}
+                # ratio2 = ratio1.clamp(1-self.clip, 1+self.clip)
+                # # \min\{.,[.]_{\text{clip}}\}
+                # ratio = torch.min(ratio1, ratio2)
+                # # \min\{. \,[.]_{\text{clip}}\}
+                # policy_loss = -sampled_advs.detach() * ratio
                 sampled_returns = sampled_returns.view(-1, 1)
                 new_values = new_values.view(-1, 1)
                 # \frac{1}{2}(v(s_t) - R_t(\tau))^2

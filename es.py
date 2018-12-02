@@ -17,7 +17,6 @@ class ESModule:
         # sigma_decay=1.0,
         threadcount=4
     ):
-        np.random.seed(int(time.time()))
         self.weights = list(policy.parameters())
         self.env_function = env_func
         self.population_size = population_size

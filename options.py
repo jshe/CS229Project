@@ -19,6 +19,7 @@ def parse_args():
 
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--n_trials', type=int, default=5)
+    parser.add_argument('--seed', type=int, default=1234)
 
     args = parser.parse_args()
     return args

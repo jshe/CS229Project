@@ -27,7 +27,6 @@ class COMBOModule:
         learning_rate=0.0001,
         threadcount=4
     ):
-        np.random.seed(int(time.time()))
         self.policy = policy
         self.weights = list(self.policy.parameters())
         self.env_function = env_func

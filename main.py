@@ -16,14 +16,18 @@ from es import ESModule
 from ppo import PPOModule
 from combo import COMBOModule
 import matplotlib.pyplot as plt
+import random
+
 # from pytorch_es.utils.helpers import weights_init
 
 
 def get_env(args):
     if args.environment == 'cartpole':
-        return gym.make("CartPole-v0")
+        env = gym.make("CartPole-v0")
     elif args.environment == 'walker':
-        return gym.make("BipedalWalker-v2")
+        env = gym.make("BipedalWalker-v2")
+    env.seed(args.seed)
+    return env
 
 
 def get_goal(args):
@@ -34,9 +38,13 @@ def get_goal(args):
 
 def main():
     args = options.parse_args()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     gym_logger.setLevel(logging.CRITICAL)
-    env_func = partial(get_env, args=args)
-    env = env_func()
+    # env_func = partial(get_env, args=args)
+    env = get_env(args)
     reward_goal = get_goal(args)
     consecutive_goal_max = 10
     max_iteration = 5000
@@ -48,7 +56,7 @@ def main():
         if args.alg == 'ES':
             run_func = partial(envs.run_env_ES,
                                policy=policy,
-                               env_func=env_func)
+                               env=env)
             alg = ESModule(
                 policy, run_func,
                 population_size=args.population_size, # HYPERPARAMETER
@@ -58,7 +66,7 @@ def main():
             )
         elif args.alg == 'PPO':
             run_func = partial(envs.run_env_PPO,
-                               env_func=env_func) # TODO: update
+                               env=env) # TODO: update
             alg = PPOModule(
                 policy,
                 run_func,
@@ -72,7 +80,7 @@ def main():
 
         elif args.alg == 'COMBO':
             run_func = partial(envs.run_env_PPO,
-                               env_func=env_func)
+                               env=env)
 
             alg = COMBOModule(
                 policy,
@@ -107,7 +115,7 @@ def main():
                     test_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
                 rewards.append(test_reward)
                 print('iter %d. reward: %f' % (iteration+1, test_reward))
-
+                 
                 if consecutive_goal_max and reward_goal:
                     consecutive_goal_count = consecutive_goal_count+1 if test_reward >= reward_goal else 0
                     if consecutive_goal_count >= consecutive_goal_max:
