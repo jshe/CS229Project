@@ -26,7 +26,7 @@ def get_env(args):
         env = gym.make("CartPole-v0")
     elif args.environment == 'walker':
         env = gym.make("BipedalWalker-v2")
-    env.seed(args.seed)
+    env.seed(np.random.randint(args.seed))
     return env
 
 
@@ -43,7 +43,7 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     gym_logger.setLevel(logging.CRITICAL)
-    # env_func = partial(get_env, args=args)
+    env_func = partial(get_env, args=args)
     env = get_env(args)
     reward_goal = get_goal(args)
     consecutive_goal_max = 10
@@ -56,7 +56,7 @@ def main():
         if args.alg == 'ES':
             run_func = partial(envs.run_env_ES,
                                policy=policy,
-                               env=env)
+                               env_func=env_func)
             alg = ESModule(
                 policy, run_func,
                 population_size=args.population_size, # HYPERPARAMETER
@@ -66,7 +66,7 @@ def main():
             )
         elif args.alg == 'PPO':
             run_func = partial(envs.run_env_PPO,
-                               env=env) # TODO: update
+                               env_func=env_func) # TODO: update
             alg = PPOModule(
                 policy,
                 run_func,
@@ -80,7 +80,7 @@ def main():
 
         elif args.alg == 'COMBO':
             run_func = partial(envs.run_env_PPO,
-                               env=env)
+                               env_func=env_func)
 
             alg = COMBOModule(
                 policy,
@@ -115,7 +115,7 @@ def main():
                     test_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
                 rewards.append(test_reward)
                 print('iter %d. reward: %f' % (iteration+1, test_reward))
-                 
+
                 if consecutive_goal_max and reward_goal:
                     consecutive_goal_count = consecutive_goal_count+1 if test_reward >= reward_goal else 0
                     if consecutive_goal_count >= consecutive_goal_max:

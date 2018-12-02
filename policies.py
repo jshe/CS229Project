@@ -108,19 +108,19 @@ class PPOPolicyContinuous(nn.Module):
         #                       nn.Linear(100, 100))
 
         self.policy = nn.Sequential(
-                                nn.Linear(state_dim, 64),
+                                nn.Linear(state_dim, 100),
                                 nn.Tanh(),
-                                nn.Linear(64, 128),
+                                nn.Linear(100, 100),
                                 nn.Tanh(),
-                                nn.Linear(128, action_dim))#,
+                                nn.Linear(100, action_dim))#,
                                 #nn.Softmax(dim=1))
 
         self.vf = nn.Sequential(
-                                nn.Linear(state_dim, 64),
+                                nn.Linear(state_dim, 100),
                                 nn.Tanh(),
-                                nn.Linear(64, 128),
+                                nn.Linear(100, 100),
                                 nn.Tanh(),
-                                nn.Linear(128, 1))
+                                nn.Linear(100, 1))
 
         self.std = nn.Parameter(torch.zeros(action_dim))
 

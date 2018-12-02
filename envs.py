@@ -8,7 +8,8 @@ from torch.distributions.categorical import Categorical
 from torch.autograd import Variable
 
 # weights is first argument because of threadpool
-def run_env_ES(weights, policy, env, render=False, stochastic=False):
+def run_env_ES(weights, policy, env_func, render=False, stochastic=False):
+    env = env_func()
     cloned_policy = copy.deepcopy(policy)
     for i, weight in enumerate(cloned_policy.parameters()):
         try:
@@ -32,7 +33,8 @@ def run_env_ES(weights, policy, env, render=False, stochastic=False):
     env.close()
     return total_reward
 
-def run_env_PPO(policy, env, max_steps=100, render=False, stochastic=True, reward_only=False, gamma=0.99):
+def run_env_PPO(policy, env_func, max_steps=100, render=False, stochastic=True, reward_only=False, gamma=0.99):
+    env = env_func()
     state = env.reset()
     done = False
     total_reward = 0

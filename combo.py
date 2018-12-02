@@ -100,14 +100,13 @@ class COMBOModule:
                 weight.data.copy_(weights[i])
             except:
                 weight.data.copy_(weights[i].data)
-        optimizer = optim.RMSprop(cloned_policy.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(cloned_policy.parameters(), lr=self.learning_rate)
 
         for _ in range(10):
             # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
-            states, actions, rewards, values, logprobs, returns = self.env_function(cloned_policy, max_steps=self.max_steps, gamma=self.gamma, stochastic=False)
+            states, actions, rewards, values, logprobs, returns = self.env_function(cloned_policy, max_steps=self.max_steps, gamma=self.gamma)#, stochastic=False)
             # \hat{A_t}(\tau) = R_t(\tau) - b(s_t)
             advantages = returns - values
-
             advantages = (advantages - advantages.mean()) / advantages.std()
             for update in range(self.n_updates):
                 sampler = BatchSampler(SubsetRandomSampler(list(range(advantages.shape[0]))), batch_size=self.batch_size, drop_last=False)
@@ -120,14 +119,21 @@ class COMBOModule:
                     # v(s_t), \pi_\theta(a_t|s_t), H(\pi(a_t, |a_t))
                     new_values, new_logprobs, dist_entropy = cloned_policy.evaluate(sampled_states, sampled_actions)
 
-                    # \dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}
-                    ratio1 = torch.exp(new_logprobs - sampled_logprobs)
-                    # [\dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}]_{\text{clip}}
-                    ratio2 = ratio1.clamp(1-self.clip, 1+self.clip)
-                    # \min\{.,[.]_{\text{clip}}\}
-                    ratio = torch.min(ratio1, ratio2)
-                    # \min\{. \,[.]_{\text{clip}}\}
-                    policy_loss = -sampled_advs.detach() * ratio
+                    ratio = torch.exp(new_logprobs - sampled_logprobs)
+                    # print(ratio.sum())
+                    sampled_advs = sampled_advs.view(-1, 1)
+                    surrogate1 = ratio * sampled_advs
+                    surrogate2 = torch.clamp(ratio, 1 - self.clip, 1 + self.clip) * sampled_advs
+                    policy_loss = -torch.min(surrogate1, surrogate2).mean()
+
+                    # # \dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}
+                    # ratio1 = torch.exp(new_logprobs - sampled_logprobs)
+                    # # [\dfrac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}]_{\text{clip}}
+                    # ratio2 = ratio1.clamp(1-self.clip, 1+self.clip)
+                    # # \min\{.,[.]_{\text{clip}}\}
+                    # ratio = torch.min(ratio1, ratio2)
+                    # # \min\{. \,[.]_{\text{clip}}\}
+                    # policy_loss = -sampled_advs.detach() * ratio
                     sampled_returns = sampled_returns.view(-1, 1)
                     new_values = new_values.view(-1, 1)
                     # \frac{1}{2}(v(s_t) - R_t(\tau))^2
