@@ -10,7 +10,7 @@ import utils
 from multiprocessing.pool import ThreadPool
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
-class COMBOModule:
+class ESPPOModule:
 
     def __init__(
         self,
@@ -24,7 +24,8 @@ class COMBOModule:
         gamma=0.99,
         clip=0.01,
         ent_coeff=0.0,
-        learning_rate=0.0001,
+        ppo_learning_rate=0.0001,
+        es_learning_rate=0.001,
         threadcount=4
     ):
         self.policy = policy
@@ -38,7 +39,8 @@ class COMBOModule:
         self.gamma = gamma
         self.clip = clip
         self.ent_coeff = ent_coeff
-        self.learning_rate = learning_rate
+        self.ppo_learning_rate = ppo_learning_rate
+        self.es_learning_rate = es_learning_rate
         # self.decay = decay
         self.pool = ThreadPool(threadcount)
         self.criterion = nn.MSELoss()
@@ -56,7 +58,7 @@ class COMBOModule:
         epsilons = []
         for i, (weight, init_weight) in enumerate(zip(new_weights, init_weights)):
             # \sigma*\epsilon
-            diff = utils.to_data((init_weight - weight))
+            diff = utils.to_data((weight-init_weight))
             # \Theta = \bar{\theta} + \sigma*\epsilon
             epsilons.append(diff/self.sigma)
         return epsilons
@@ -76,8 +78,15 @@ class COMBOModule:
         )
         rewards = [result[0] for result in results]
         print(rewards)
+        #b = np.max(rewards)
+        #rewards = np.exp(rewards - b)
+        #rewards = rewards / rewards.sum()
+        #print(rewards)
+
         new_epsilons_population = [result[1] for result in results]
+        #print(new_epsilons_population)
         # TODO: early stopping
+
         if np.std(rewards) != 0:
             normalized_rewards = (rewards - np.mean(rewards)) / np.std(rewards)
         else:
@@ -86,21 +95,21 @@ class COMBOModule:
             new_epsilons = np.array([new_epsilons[index] for new_epsilons in new_epsilons_population])
             # sum_{i=1}^k \epsilon_i R(\tau_i) (7)
             rewards_population = utils.to_var(np.dot(new_epsilons.T, normalized_rewards).T)
-            # \bar{\theta} = \bar{theta} + \dfrac{1}{k\sigma} sum_{i=1}^k \epsilon_i R(\tau_i)a (7)
-            weight.data = weight.data + self.learning_rate / (self.population_size * self.sigma) * rewards_population
+            # \bar{\theta} = \bar{theta} + \dfrac{1}{k\sigma} sum_{i=1}^k \epsilon_i R(\tau_i) (7)
+            weight.data = weight.data + self.es_learning_rate * rewards_population / (self.population_size * self.sigma)
             # self.learning_rate *= self.decay
             # self.sigma *= self.sigma_decay
         return copy.deepcopy(self.weights)
 
     def ppo_step(self, weights):
-        init_weights = copy.deepcopy(weights)
+        init_weights = copy.deepcopy(self.weights)
         cloned_policy = copy.deepcopy(self.policy)
         for i, weight in enumerate(cloned_policy.parameters()):
             try:
                 weight.data.copy_(weights[i])
             except:
                 weight.data.copy_(weights[i].data)
-        optimizer = optim.Adam(cloned_policy.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(cloned_policy.parameters(), lr=self.ppo_learning_rate)
 
         for _ in range(10):
             # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
@@ -148,7 +157,7 @@ class COMBOModule:
 
     @property
     def model_name(self):
-        return "COMBO_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(
+        return "COMBO_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(
                 self.population_size,
                 self.sigma,
                 self.n_updates,
@@ -157,4 +166,5 @@ class COMBOModule:
                 self.gamma,
                 self.clip,
                 self.ent_coeff,
-                self.learning_rate)
+                self.ppo_learning_rate,
+                self.es_learning_rate)

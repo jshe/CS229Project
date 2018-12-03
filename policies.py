@@ -11,13 +11,13 @@ def get_policy(args, env):
         if args.alg == 'ES':
             # add the model on top of the convolutional base
             policy = ESPolicyContinuous(24, 4)
-        elif args.alg == 'PPO' or 'COMBO':
+        elif args.alg == 'PPO' or 'ESPPO' or 'MAXPPO':
             policy = PPOPolicyContinuous(24, 4)
     elif args.environment == 'cartpole':
         if args.alg == 'ES':
             # add the model on top of the convolutional base
             policy = ESPolicyDiscrete(4, 2)
-        elif args.alg == 'PPO' or 'COMBO':
+        elif args.alg == 'PPO' or 'ESPPO' or 'MAXPPO':
             policy = PPOPolicyDiscrete(4, 2)
     if torch.cuda.is_available():
         policy = policy.cuda()

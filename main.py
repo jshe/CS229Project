@@ -14,7 +14,8 @@ import numpy as np
 from gym import logger as gym_logger
 from es import ESModule
 from ppo import PPOModule
-from combo import COMBOModule
+from es_ppo import ESPPOModule
+from max_ppo import MaxPPOModule
 import matplotlib.pyplot as plt
 import random
 
@@ -47,7 +48,7 @@ def main():
     env = get_env(args)
     reward_goal = get_goal(args)
     consecutive_goal_max = 10
-    max_iteration = 5000
+    max_iteration = 10000
     all_rewards = []
     all_times = []
     all_totals = []
@@ -61,7 +62,7 @@ def main():
                 policy, run_func,
                 population_size=args.population_size, # HYPERPARAMETER
                 sigma=args.sigma, # HYPERPARAMETER
-                learning_rate=args.lr, # HYPERPARAMETER
+                learning_rate=args.lr, # HYPERPARAMETER TODO:CHANGE
                 threadcount=4
             )
         elif args.alg == 'PPO':
@@ -76,13 +77,13 @@ def main():
                 gamma=args.gamma,
                 clip=args.clip,
                 ent_coeff=args.ent_coeff,
-                learning_rate=args.lr)
+                learning_rate=args.lr) # TODO: CHANGE
 
-        elif args.alg == 'COMBO':
+        elif args.alg == 'ESPPO':
             run_func = partial(envs.run_env_PPO,
                                env_func=env_func)
 
-            alg = COMBOModule(
+            alg = ESPPOModule(
                 policy,
                 run_func,
                 population_size=args.population_size, # HYPERPARAMETER
@@ -93,9 +94,28 @@ def main():
                 gamma=args.gamma,
                 clip=args.clip,
                 ent_coeff=args.ent_coeff,
-                learning_rate=args.lr,
+                ppo_learning_rate=args.ppo_lr,
+                es_learning_rate=args.es_lr,
                 threadcount=4)
 
+        elif args.alg == 'MAXPPO':
+            run_func = partial(envs.run_env_PPO,
+                               env_func=env_func)
+
+            alg = MaxPPOModule(
+                policy,
+                run_func,
+                population_size=args.population_size, # HYPERPARAMETER
+                sigma=args.sigma, # HYPERPARAMETER
+                n_updates=args.n_updates, # HYPERPARAMETER
+                batch_size=args.batch_size, # HYPERPARAMETER
+                max_steps = args.max_steps,
+                gamma=args.gamma,
+                clip=args.clip,
+                ent_coeff=args.ent_coeff,
+                ppo_learning_rate=args.ppo_lr,
+                threadcount=4)
+            
         exp_dir = os.path.join(args.directory, alg.model_name)
         if not os.path.exists(exp_dir):
             os.makedirs(exp_dir)
@@ -111,7 +131,7 @@ def main():
             if (iteration+1) % 10 == 0:
                 if args.alg == 'ES':
                     test_reward = run_func(weights, stochastic=False, render=False)
-                elif args.alg == 'PPO' or 'COMBO':
+                elif args.alg == 'PPO' or 'ESPPO' or 'MAXPPO':
                     test_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
                 rewards.append(test_reward)
                 print('iter %d. reward: %f' % (iteration+1, test_reward))

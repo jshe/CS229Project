@@ -4,7 +4,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--directory', type=str, default='./checkpoints', help='experiment directory')
-    parser.add_argument('-a', '--alg', type=str, help='ES or PPO')
+    parser.add_argument('-a', '--alg', type=str, help='ES or PPO or ESPPO or MAXPPO')
 
     parser.add_argument('--population_size', type=int, default=5)
     parser.add_argument('--sigma', type=float, default=0.1)
@@ -17,7 +17,9 @@ def parse_args():
     parser.add_argument('--ent_coeff', type=float, default=0.0)
     parser.add_argument('--environment', type=str, default='cartpole', choices=['cartpole', 'walker'])
 
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.001) # TODO: delete
+    parser.add_argument('--es_lr', type=float, default=0.001)
+    parser.add_argument('--ppo_lr', type=float, default=0.0001)
     parser.add_argument('--n_trials', type=int, default=5)
     parser.add_argument('--seed', type=int, default=1234)
 
