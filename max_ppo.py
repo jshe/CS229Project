@@ -9,6 +9,7 @@ import time
 import utils
 from multiprocessing.pool import ThreadPool
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+import torch.multiprocessing as mp
 
 class MaxPPOModule:
 
@@ -40,7 +41,7 @@ class MaxPPOModule:
         self.ent_coeff = ent_coeff
         self.ppo_learning_rate = ppo_learning_rate
         # self.decay = decay
-        self.pool = ThreadPool(threadcount)
+        self.pool = mp.Pool(threadcount)
         self.criterion = nn.MSELoss()
 
     def perturb_weights(self, weights, epsilons=[]):
@@ -61,10 +62,17 @@ class MaxPPOModule:
                 epsilons.append(np.random.randn(*weight.data.size()))
             epsilons_population.append(epsilons)
         # R(\tau_i; \Theta)
-        results = self.pool.map(
-           self.ppo_step,
-           [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
+        #results = self.pool.map(
+        #   self.ppo_step,
+        #   [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
+        #)
+        results = self.pool.map_async(
+            self.ppo_step, [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
         )
+        results = results.get()
+        #pool.close()
+        #pool.join()
+        
         rewards = [result[0] for result in results]
         print(rewards)
         ind = np.argmax(rewards)
