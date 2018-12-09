@@ -9,9 +9,8 @@ import time
 import utils
 from multiprocessing.pool import ThreadPool
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-#import torch.multiprocessing as mp
 
-class MaxPPOModule:
+class AltPPOModule:
 
     def __init__(
         self,
@@ -25,8 +24,8 @@ class MaxPPOModule:
         gamma=0.99,
         clip=0.01,
         ent_coeff=0.0,
-        n_seq=1,
         ppo_learning_rate=0.0001,
+        es_learning_rate=0.001,
         threadcount=4
     ):
         self.policy = policy
@@ -40,11 +39,13 @@ class MaxPPOModule:
         self.gamma = gamma
         self.clip = clip
         self.ent_coeff = ent_coeff
-        self.n_seq = n_seq
         self.ppo_learning_rate = ppo_learning_rate
+        self.es_learning_rate = es_learning_rate
         # self.decay = decay
         self.pool = ThreadPool(threadcount)
         self.criterion = nn.MSELoss()
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.ppo_learning_rate)
+        self.counter = 0
 
     def perturb_weights(self, weights, epsilons=[]):
         new_weights = []
@@ -55,7 +56,18 @@ class MaxPPOModule:
             new_weights.append(weight.data + perturb)
         return new_weights
 
+    def unperturb_weights(self, new_weights, init_weights):
+        epsilons = []
+        for i, (weight, init_weight) in enumerate(zip(new_weights, init_weights)):
+            # \sigma*\epsilon
+            diff = utils.to_data((weight-init_weight))
+            # \Theta = \bar{\theta} + \sigma*\epsilon
+            epsilons.append(diff/self.sigma)
+        return epsilons
+
     def step(self):
+        if (self.counter % 5) == 0:
+            self.ppo_step(update=True)
         epsilons_population = []
         for _ in range(self.population_size):
             epsilons = []
@@ -68,32 +80,41 @@ class MaxPPOModule:
            self.ppo_step,
            [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
         )
-        #results = self.pool.map_async(
-        #    self.ppo_step, [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
-        #)
-        #results = results.get()
-        #pool.close()
-        #pool.join()
-        
         rewards = [result[0] for result in results]
         print(rewards)
-        ind = np.argmax(rewards)
-        new_weights_population = [result[1] for result in results]
+        #b = np.max(rewards)
+        #rewards = np.exp(rewards - b)
+        #rewards = rewards / rewards.sum()
+        #print(rewards)
+
+        new_epsilons_population = [result[1] for result in results]
+        #print(new_epsilons_population)
+        # TODO: early stopping
+
+        if np.std(rewards) != 0:
+            normalized_rewards = (rewards - np.mean(rewards)) / np.std(rewards)
+        else:
+            normalized_rewards =  rewards
         for index, weight in enumerate(self.weights):
-            new_weights = np.array([new_weights[index] for new_weights in new_weights_population])
-            weight.data = new_weights[ind]
+            new_epsilons = np.array([new_epsilons[index] for new_epsilons in new_epsilons_population])
+            # sum_{i=1}^k \epsilon_i R(\tau_i) (7)
+            rewards_population = utils.to_var(np.dot(new_epsilons.T, normalized_rewards).T)
+            # \bar{\theta} = \bar{theta} + \dfrac{1}{k\sigma} sum_{i=1}^k \epsilon_i R(\tau_i) (7)
+            weight.data = weight.data + self.es_learning_rate * rewards_population / (self.population_size * self.sigma)
+            # self.learning_rate *= self.decay
+            # self.sigma *= self.sigma_decay
         return copy.deepcopy(self.weights)
 
     def ppo_step(self, weights):
+        init_weights = copy.deepcopy(self.weights)
         cloned_policy = copy.deepcopy(self.policy)
         for i, weight in enumerate(cloned_policy.parameters()):
             try:
                 weight.data.copy_(weights[i])
             except:
                 weight.data.copy_(weights[i].data)
-        optimizer = optim.Adam(cloned_policy.parameters(), lr=self.ppo_learning_rate)
 
-        for _ in range(self.n_seq):
+        for _ in range(10):
             # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
             states, actions, rewards, values, logprobs, returns = self.env_function(cloned_policy, max_steps=self.max_steps, gamma=self.gamma)#, stochastic=False)
             # \hat{A_t}(\tau) = R_t(\tau) - b(s_t)
@@ -134,8 +155,8 @@ class MaxPPOModule:
                     loss.backward()
                     optimizer.step()
         rewards = self.env_function(cloned_policy, stochastic=False, render=False, reward_only=True)
-        new_weights = list(cloned_policy.parameters())
-        return rewards, new_weights
+        new_epsilons = self.unperturb_weights(list(cloned_policy.parameters()), init_weights)
+        return rewards, new_epsilons
 
     @property
     def model_name(self):
@@ -149,4 +170,4 @@ class MaxPPOModule:
                 self.clip,
                 self.ent_coeff,
                 self.ppo_learning_rate,
-                self.n_seq)
+                self.es_learning_rate)

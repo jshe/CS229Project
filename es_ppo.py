@@ -24,6 +24,7 @@ class ESPPOModule:
         gamma=0.99,
         clip=0.01,
         ent_coeff=0.0,
+        n_seq=1,
         ppo_learning_rate=0.0001,
         es_learning_rate=0.001,
         threadcount=4
@@ -39,6 +40,7 @@ class ESPPOModule:
         self.gamma = gamma
         self.clip = clip
         self.ent_coeff = ent_coeff
+        self.n_seq = n_seq
         self.ppo_learning_rate = ppo_learning_rate
         self.es_learning_rate = es_learning_rate
         # self.decay = decay
@@ -111,7 +113,7 @@ class ESPPOModule:
                 weight.data.copy_(weights[i].data)
         optimizer = optim.Adam(cloned_policy.parameters(), lr=self.ppo_learning_rate)
 
-        for _ in range(10):
+        for _ in range(self.n_seq):
             # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
             states, actions, rewards, values, logprobs, returns = self.env_function(cloned_policy, max_steps=self.max_steps, gamma=self.gamma)#, stochastic=False)
             # \hat{A_t}(\tau) = R_t(\tau) - b(s_t)
@@ -157,7 +159,7 @@ class ESPPOModule:
 
     @property
     def model_name(self):
-        return "COMBO_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(
+        return "COMBO_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(
                 self.population_size,
                 self.sigma,
                 self.n_updates,
@@ -167,4 +169,5 @@ class ESPPOModule:
                 self.clip,
                 self.ent_coeff,
                 self.ppo_learning_rate,
-                self.es_learning_rate)
+                self.es_learning_rate,
+                self.n_seq)

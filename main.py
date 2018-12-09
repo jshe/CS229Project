@@ -48,7 +48,7 @@ def main():
     env = get_env(args)
     reward_goal = get_goal(args)
     consecutive_goal_max = 10
-    max_iteration = 10000
+    max_iteration = args.epoch
     all_rewards = []
     all_times = []
     all_totals = []
@@ -63,8 +63,8 @@ def main():
                 population_size=args.population_size, # HYPERPARAMETER
                 sigma=args.sigma, # HYPERPARAMETER
                 learning_rate=args.lr, # HYPERPARAMETER TODO:CHANGE
-                threadcount=4
-            )
+                threadcount=args.population_size)
+        
         elif args.alg == 'PPO':
             run_func = partial(envs.run_env_PPO,
                                env_func=env_func) # TODO: update
@@ -94,9 +94,10 @@ def main():
                 gamma=args.gamma,
                 clip=args.clip,
                 ent_coeff=args.ent_coeff,
+                n_seq=args.n_seq,
                 ppo_learning_rate=args.ppo_lr,
                 es_learning_rate=args.es_lr,
-                threadcount=4)
+                threadcount=args.population_size)
 
         elif args.alg == 'MAXPPO':
             run_func = partial(envs.run_env_PPO,
@@ -113,8 +114,9 @@ def main():
                 gamma=args.gamma,
                 clip=args.clip,
                 ent_coeff=args.ent_coeff,
+                n_seq=args.n_seq,
                 ppo_learning_rate=args.ppo_lr,
-                threadcount=4)
+                threadcount=args.population_size)
             
         exp_dir = os.path.join(args.directory, alg.model_name)
         if not os.path.exists(exp_dir):
@@ -171,6 +173,7 @@ def main():
     path = os.path.join(exp_dir, "rewards_plot.png")
     plt.savefig(path)
     plt.close()
+    np.savetxt(os.path.join(exp_dir, 'rewards.txt'), rewards_mean)
     pickle.dump(weights, open(os.path.join(exp_dir, 'weights.pkl'), 'wb'))
     out_file = open(os.path.join(exp_dir, "results.txt"), 'w')
     print(f"Average rewards from final weights: {total_mean}")

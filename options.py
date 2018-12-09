@@ -22,6 +22,8 @@ def parse_args():
     parser.add_argument('--ppo_lr', type=float, default=0.0001)
     parser.add_argument('--n_trials', type=int, default=5)
     parser.add_argument('--seed', type=int, default=1234)
+    parser.add_argument('--n_seq', type=int, default=1)
+    parser.add_argument('--epoch', type=int, default=10000)
 
     args = parser.parse_args()
     return args
