@@ -78,18 +78,18 @@ class AltPPOModule:
                     epsilons.append(np.random.randn(*weight.data.size()))
                 epsilons_population.append(epsilons)
             # R(\tau_i; \Theta)
-            results = self.pool.map(
+            rewards = self.pool.map(
                self.ppo_step,
                [self.perturb_weights(copy.deepcopy(self.weights), epsilons=eps) for eps in epsilons_population]
             )
-            rewards = [result[0] for result in results]
+            #rewards = [result[0] for result in results]
             print(rewards)
             #b = np.max(rewards)
             #rewards = np.exp(rewards - b)
             #rewards = rewards / rewards.sum()
             #print(rewards)
 
-            new_epsilons_population = [result[1] for result in results]
+            #new_epsilons_population = [result[1] for result in results]
             #print(new_epsilons_population)
             # TODO: early stopping
 
@@ -98,9 +98,9 @@ class AltPPOModule:
             else:
                 normalized_rewards =  rewards
             for index, weight in enumerate(self.weights):
-                new_epsilons = np.array([new_epsilons[index] for new_epsilons in new_epsilons_population])
+                epsilons = np.array([epsilons[index] for epsilons in epsilons_population])
                 # sum_{i=1}^k \epsilon_i R(\tau_i) (7)
-                rewards_population = utils.to_var(np.dot(new_epsilons.T, normalized_rewards).T)
+                rewards_population = utils.to_var(np.dot(epsilons.T, normalized_rewards).T)
                 # \bar{\theta} = \bar{theta} + \dfrac{1}{k\sigma} sum_{i=1}^k \epsilon_i R(\tau_i) (7)
                 weight.data = weight.data + self.es_learning_rate * rewards_population / (self.population_size * self.sigma)
                 # self.learning_rate *= self.decay
@@ -162,8 +162,8 @@ class AltPPOModule:
                     weight.data.copy_(weights[i].data)
 
         rewards = self.env_function(cloned_policy, stochastic=False, render=False, reward_only=True)
-        new_epsilons = self.unperturb_weights(list(cloned_policy.parameters()), init_weights)
-        return rewards, new_epsilons
+        #new_epsilons = self.unperturb_weights(list(cloned_policy.parameters()), init_weights)
+        return rewards#, new_epsilons
 
     @property
     def model_name(self):
