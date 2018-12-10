@@ -117,7 +117,20 @@ def main():
                 n_seq=args.n_seq,
                 ppo_learning_rate=args.ppo_lr,
                 threadcount=args.population_size)
-            
+  
+        if args.render:
+            with open(os.path.join(args.directory, 'weights.pkl'),'rb') as fp:
+                weights = pickle.load(fp)
+                policy.load_state_dict(weights)
+
+            if args.alg == 'ES':
+                total_reward = run_func(weights, stochastic=False, render=True)
+            elif args.alg == 'PPO' or 'COMBO':
+                total_reward = run_func(policy, stochastic=False, render=True, reward_only=True)
+            print(f"Total rewards from episode: {total_rewards}")
+            return
+
+
         exp_dir = os.path.join(args.directory, alg.model_name)
         if not os.path.exists(exp_dir):
             os.makedirs(exp_dir)

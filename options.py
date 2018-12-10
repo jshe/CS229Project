@@ -5,7 +5,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--directory', type=str, default='./checkpoints', help='experiment directory')
     parser.add_argument('-a', '--alg', type=str, help='ES or PPO or ESPPO or MAXPPO')
-
+    parser.add_argument('--render', type=int, default=0)
+    
     parser.add_argument('--population_size', type=int, default=5)
     parser.add_argument('--sigma', type=float, default=0.1)
 
