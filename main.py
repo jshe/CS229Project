@@ -16,6 +16,7 @@ from es import ESModule
 from ppo import PPOModule
 from es_ppo import ESPPOModule
 from max_ppo import MaxPPOModule
+from alt_ppo import AltPPOModule
 import matplotlib.pyplot as plt
 import random
 
@@ -118,6 +119,28 @@ def main():
                 ppo_learning_rate=args.ppo_lr,
                 threadcount=args.population_size)
   
+
+        elif args.alg == 'ALTPPO':
+            run_func = partial(envs.run_env_PPO,
+                               env_func=env_func)
+
+            alg = MaxPPOModule(
+                policy,
+                run_func,
+                population_size=args.population_size, # HYPERPARAMETER
+                sigma=args.sigma, # HYPERPARAMETER
+                n_updates=args.n_updates, # HYPERPARAMETER
+                batch_size=args.batch_size, # HYPERPARAMETER
+                max_steps = args.max_steps,
+                gamma=args.gamma,
+                clip=args.clip,
+                ent_coeff=args.ent_coeff,
+                n_alt=args.n_alt,
+                es_learning_rate=args.es_lr,
+                ppo_learning_rate=args.ppo_lr,
+                threadcount=args.population_size)
+
+
         if args.render:
             with open(os.path.join(args.directory, 'weights.pkl'),'rb') as fp:
                 weights = pickle.load(fp)
@@ -125,7 +148,7 @@ def main():
 
             if args.alg == 'ES':
                 total_reward = run_func(weights, stochastic=False, render=True)
-            elif args.alg == 'PPO' or 'COMBO':
+            else:
                 total_reward = run_func(policy, stochastic=False, render=True, reward_only=True)
             print(f"Total rewards from episode: {total_rewards}")
             return
@@ -146,7 +169,7 @@ def main():
             if (iteration+1) % 10 == 0:
                 if args.alg == 'ES':
                     test_reward = run_func(weights, stochastic=False, render=False)
-                elif args.alg == 'PPO' or 'ESPPO' or 'MAXPPO':
+                else:
                     test_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
                 rewards.append(test_reward)
                 print('iter %d. reward: %f' % (iteration+1, test_reward))
@@ -159,7 +182,7 @@ def main():
         end = time.time() - start
         if args.alg == 'ES':
             total_reward = run_func(weights, stochastic=False, render=False)
-        elif args.alg == 'PPO' or 'COMBO':
+        else:
             total_reward = run_func(policy, stochastic=False, render=False, reward_only=True)
         all_rewards.append(rewards)
         all_times.append(end)
