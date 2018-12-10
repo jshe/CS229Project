@@ -124,7 +124,7 @@ def main():
             run_func = partial(envs.run_env_PPO,
                                env_func=env_func)
 
-            alg = MaxPPOModule(
+            alg = AltPPOModule(
                 policy,
                 run_func,
                 population_size=args.population_size, # HYPERPARAMETER

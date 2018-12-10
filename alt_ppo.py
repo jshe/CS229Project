@@ -41,6 +41,7 @@ class AltPPOModule:
         self.gamma = gamma
         self.clip = clip
         self.ent_coeff = ent_coeff
+        self.n_alt = n_alt
         self.es_learning_rate = es_learning_rate
         self.ppo_learning_rate = ppo_learning_rate
         # self.decay = decay
@@ -110,6 +111,7 @@ class AltPPOModule:
         return copy.deepcopy(self.weights)
 
     def ppo_step(self, weights):
+        init_weights = copy.deepcopy(self.weights)
         if weights is None:
             # s_t, a_t, b(s_t) = v(s_t), \pi_{\theta_{\text{old}}}(a_t|s_t), R_t(\tau)
             states, actions, rewards, values, logprobs, returns = self.env_function(self.policy, max_steps=self.max_steps, gamma=self.gamma)#, stochastic=False)
@@ -154,10 +156,10 @@ class AltPPOModule:
         else:
             cloned_policy = copy.deepcopy(self.policy)
             for i, weight in enumerate(cloned_policy.parameters()):
-            try:
-                weight.data.copy_(weights[i])
-            except:
-                weight.data.copy_(weights[i].data)
+                 try:
+                    weight.data.copy_(weights[i])
+                 except:
+                    weight.data.copy_(weights[i].data)
 
         rewards = self.env_function(cloned_policy, stochastic=False, render=False, reward_only=True)
         new_epsilons = self.unperturb_weights(list(cloned_policy.parameters()), init_weights)
@@ -165,7 +167,7 @@ class AltPPOModule:
 
     @property
     def model_name(self):
-        return "COMBO_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(
+        return "COMBO_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(
                 self.population_size,
                 self.sigma,
                 self.n_updates,
@@ -174,5 +176,6 @@ class AltPPOModule:
                 self.gamma,
                 self.clip,
                 self.ent_coeff,
+                self.es_learning_rate,
                 self.ppo_learning_rate,
-                self.n_seq)
+                self.n_alt)
