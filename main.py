@@ -216,7 +216,7 @@ def main():
     msg = f"Average rewards from final weights: {total_mean}"
     msg += "\n"
     print(f"Average time to completion: {time_mean}")
-    msg += f"Average ime to completion: {time_mean}"
+    msg += f"Average time to completion: {time_mean}"
     msg += "\n"
     print(f"Results saved at: {exp_dir}")
     out_file.write(msg)
